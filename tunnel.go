@@ -6,23 +6,39 @@ import (
 	"crypto/tls"
 	"log"
 	"net"
+	"strconv"
 )
 
-const localAddr string = "127.0.0.1:5588"
-const remoteAddr string = "example.com:4444"
-const MaxConn int16 = 3
+type tunnel struct {
+	localAddr          string
+	remoteAddr         string
+	remoteHost         string
+	maxConn            int16
+	insecureSkipVerify bool
+}
 
-func proxyConn(conn net.Conn) {
+func NewTunnel(remoteHost string, remotePort uint8, localHost string, localPort uint8, maxConn int16, insecureSkipVerify bool) tunnel {
+	t := &tunnel{
+		localAddr:          localHost + ":" + strconv.Itoa(int(localPort)),   //  "127.0.0.1:5588",
+		remoteAddr:         remoteHost + ":" + strconv.Itoa(int(remotePort)), // "example.com:4444",
+		remoteHost:         remoteHost,
+		maxConn:            maxConn,
+		insecureSkipVerify: insecureSkipVerify,
+	}
+	return *t
+}
+
+func (t tunnel) proxyConn(conn net.Conn) {
 	defer conn.Close()
 
-	rAddr, err := net.ResolveTCPAddr("tcp", remoteAddr)
+	rAddr, err := net.ResolveTCPAddr("tcp", t.remoteAddr)
 	if err != nil {
 		log.Print(err)
 	}
 
 	conf := &tls.Config{
-		InsecureSkipVerify: true,
-		ServerName:         "example.com",
+		InsecureSkipVerify: t.insecureSkipVerify,
+		ServerName:         t.remoteHost,
 	}
 
 	//rConn, err := net.DialTCP("tcp", nil, rAddr)
@@ -35,11 +51,11 @@ func proxyConn(conn net.Conn) {
 
 	//	log.Printf("remoteAddr connected: %v\n", rAddr.String())
 
-	Pipe(conn, rConn)
+	t.pipe(conn, rConn)
 	//	log.Printf("proxyConn end: %v -> %v\n", conn.RemoteAddr(), rConn.RemoteAddr())
 }
 
-func chanFromConn(conn net.Conn) chan []byte {
+func (t tunnel) chanFromConn(conn net.Conn) chan []byte {
 	c := make(chan []byte)
 
 	go func() {
@@ -63,9 +79,9 @@ func chanFromConn(conn net.Conn) chan []byte {
 	return c
 }
 
-func Pipe(conn1 net.Conn, conn2 net.Conn) {
-	chan1 := chanFromConn(conn1)
-	chan2 := chanFromConn(conn2)
+func (t tunnel) pipe(conn1 net.Conn, conn2 net.Conn) {
+	chan1 := t.chanFromConn(conn1)
+	chan2 := t.chanFromConn(conn2)
 
 	for {
 		select {
@@ -85,12 +101,12 @@ func Pipe(conn1 net.Conn, conn2 net.Conn) {
 	}
 }
 
-func StartTunnel() {
+func (t tunnel) StartTunnel() {
 	log.SetFlags(log.Lshortfile)
 
-	log.Printf("Listening: %v -> %v\n\n", localAddr, remoteAddr)
+	log.Printf("Listening: %v -> %v\n\n", t.localAddr, t.remoteAddr)
 
-	addr, err := net.ResolveTCPAddr("tcp", localAddr)
+	addr, err := net.ResolveTCPAddr("tcp", t.localAddr)
 	if err != nil {
 		panic(err)
 	}
@@ -119,14 +135,14 @@ func StartTunnel() {
 		default:
 
 		}
-		if i < MaxConn {
+		if i < t.maxConn {
 			i++
-			log.Printf("[%v/%v]accepted: %v\n", i, MaxConn, conn.RemoteAddr())
+			log.Printf("[%v/%v]accepted: %v\n", i, t.maxConn, conn.RemoteAddr())
 
 			// Create a new goroutine which will call the connection handler and  then free up the space.
 			go func(connection net.Conn) {
-				proxyConn(connection)
-				//				log.Printf("[%v/%v]Closed connection from %s\r\n", i, MaxConn, connection.RemoteAddr())
+				t.proxyConn(connection)
+				//				log.Printf("[%v/%v]Closed connection from %s\r\n", i, maxConn, connection.RemoteAddr())
 				log.Printf("Closed connection from %s\r\n", connection.RemoteAddr())
 				select {
 				case t := <-count:
