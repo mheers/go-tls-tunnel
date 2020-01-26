@@ -17,7 +17,7 @@ type tunnel struct {
 	insecureSkipVerify bool
 }
 
-func NewTunnel(remoteHost string, remotePort uint8, localHost string, localPort uint8, maxConn int16, insecureSkipVerify bool) tunnel {
+func NewTunnel(remoteHost string, remotePort uint16, localHost string, localPort uint16, maxConn int16, insecureSkipVerify bool) tunnel {
 	t := &tunnel{
 		localAddr:          localHost + ":" + strconv.Itoa(int(localPort)),   //  "127.0.0.1:5588",
 		remoteAddr:         remoteHost + ":" + strconv.Itoa(int(remotePort)), // "example.com:4444",
