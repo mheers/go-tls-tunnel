@@ -154,9 +154,10 @@ func (t *Tunnel) StartTunnel() error {
 			default:
 
 			}
-			if i < t.maxConn {
+			if i < t.maxConn && conn != nil {
 				i++
-				logrus.Printf("[%v/%v]accepted: %v\n", i, t.maxConn, conn.RemoteAddr())
+				ra := conn.RemoteAddr()
+				logrus.Printf("[%v/%v]accepted: %v\n", i, t.maxConn, ra)
 
 				// Create a new goroutine which will call the connection handler and  then free up the space.
 				go func(connection net.Conn) {
@@ -172,7 +173,9 @@ func (t *Tunnel) StartTunnel() error {
 					}
 				}(conn)
 			} else {
-				conn.Close()
+				if conn != nil {
+					conn.Close()
+				}
 				logrus.Printf("closed: %v\n", i)
 			}
 		}
